@@ -1,0 +1,1845 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LLM Pipeline Explorer</title>
+<style>
+/* WHAT THIS DOES: CSS variables, typography, and responsive layout for the observatory-at-night theme. */
+:root {
+  --bg: #0c0e15;
+  --bg-deep: #090a10;
+  --bg-glow: #1a1d2e;
+  --panel-bg: rgba(16, 18, 27, 0.88);
+  --ink: #efe7d6;
+  --dim: #9a9686;
+  --faint: #6b685c;
+  --amber: #f2b35a;
+  --teal: #6fb7a8;
+  --rose: #d9776b;
+  --periwinkle: #8e9ad8;
+  --stone: #cfc8b6;
+  --punct: #8a8678;
+  --line: rgba(239, 231, 214, 0.14);
+  --line-strong: rgba(239, 231, 214, 0.28);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: hidden;
+  font: 15px/1.5 "Iowan Old Style", Palatino, Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+}
+canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+canvas:active { cursor: grabbing; }
+
+/* Header at top left */
+header {
+  position: fixed;
+  top: 20px;
+  left: 24px;
+  pointer-events: none;
+  z-index: 10;
+}
+h1 {
+  font-weight: 400;
+  font-size: 24px;
+  letter-spacing: 0.03em;
+  color: var(--ink);
+}
+header p {
+  color: var(--dim);
+  font-size: 13px;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* Floating bottom control observatory panel */
+#panel {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: min(940px, calc(100% - 24px));
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 18px 16px;
+  z-index: 20;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+/* Tabs & Tour Navigation Row */
+.nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+#tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#tabs::-webkit-scrollbar { display: none; }
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--dim);
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab b {
+  font: 11.5px ui-monospace, Menlo, monospace;
+  margin-right: 5px;
+  color: var(--amber);
+  font-weight: 400;
+}
+.tab:hover { color: var(--ink); }
+.tab.on {
+  color: var(--ink);
+  border-color: var(--amber);
+}
+
+.tour-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Stage Explanation text */
+#desc {
+  min-height: 52px;
+  color: #d8d1c0;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+#desc em {
+  color: var(--amber);
+  font-style: normal;
+  border-bottom: 1px dotted rgba(242, 179, 90, 0.5);
+}
+
+/* Text Input & Controls row */
+.input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--dim);
+}
+.input-wrap {
+  flex: 1;
+  min-width: 220px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+input[type=text] {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 8px 12px;
+  font: 13px ui-monospace, Menlo, monospace;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input[type=text]:focus { border-color: var(--amber); }
+.tok-badge {
+  position: absolute;
+  right: 10px;
+  font: 11px ui-monospace, Menlo, monospace;
+  color: var(--dim);
+  pointer-events: none;
+}
+.tok-badge.warn { color: var(--rose); }
+
+/* Contextual stage controls row */
+.controls-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  font-size: 13px;
+  color: var(--dim);
+}
+
+/* Buttons, Pills, Sliders */
+.pill {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: 99px;
+  padding: 4px 11px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.pill:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.pill.on {
+  border-color: var(--amber);
+  background: rgba(242, 179, 90, 0.12);
+  color: var(--amber);
+}
+.pill.go {
+  background: var(--amber);
+  color: #1a1405;
+  border-color: var(--amber);
+  font-weight: 600;
+}
+.pill.go:hover {
+  background: #f8c57b;
+  color: #1a1405;
+}
+button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+input[type=range] {
+  accent-color: var(--amber);
+  vertical-align: middle;
+  cursor: pointer;
+}
+.slider-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.slider-group b {
+  font: 12px ui-monospace, Menlo, monospace;
+  color: var(--ink);
+  min-width: 26px;
+}
+.sub-caption {
+  font-size: 12.5px;
+  color: var(--dim);
+  font-style: italic;
+  margin-left: 4px;
+}
+
+/* Legend items */
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.legend-chip span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Footer note */
+footer {
+  position: fixed;
+  right: 20px;
+  bottom: 6px;
+  font-size: 11px;
+  color: var(--faint);
+  font-style: italic;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Interactive Hover Tooltip */
+#tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(13, 15, 24, 0.94);
+  border: 1px solid var(--amber);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--ink);
+  font-family: ui-monospace, Menlo, monospace;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  z-index: 100;
+  transform: translate(-50%, -130%);
+  white-space: nowrap;
+}
+
+.hide { display: none !important; }
+
+/* Responsive adjustments for phones & smaller viewports */
+@media (max-width: 768px) {
+  header { top: 14px; left: 16px; }
+  h1 { font-size: 19px; }
+  header p { font-size: 12px; }
+  #panel {
+    bottom: 8px;
+    width: calc(100% - 16px);
+    padding: 10px 12px;
+  }
+  .tab { padding: 4px 6px; font-size: 12px; }
+  #desc { font-size: 13px; min-height: 48px; }
+  footer { display: none; }
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<header>
+  <h1>LLM Pipeline Explorer</h1>
+  <p>Real shapes, toy numbers.</p>
+</header>
+
+<div id="tooltip"></div>
+
+<div id="panel">
+  <!-- Top navigation row with tabs and tour -->
+  <div class="nav-row">
+    <div id="tabs" role="tablist" aria-label="Pipeline stages"></div>
+    <div class="tour-controls">
+      <button class="pill" id="prev-btn" aria-label="Previous stage">← Prev</button>
+      <button class="pill" id="next-btn" aria-label="Next stage">Next →</button>
+      <button class="pill" id="tour-btn" aria-label="Play automatic tour">▶ Play tour</button>
+    </div>
+  </div>
+
+  <!-- Educational stage explanation -->
+  <div id="desc" aria-live="polite"></div>
+
+  <!-- Sentence text input and length counter -->
+  <div class="input-row">
+    <div class="input-wrap">
+      <input type="text" id="txt" value="The cat sat on the mat because it" spellcheck="false" aria-label="Sentence to trace through the pipeline" maxlength="280">
+      <span class="tok-badge" id="tok-count">8/40 tokens</span>
+    </div>
+  </div>
+
+  <!-- Stage-specific interactive controls row -->
+  <div class="controls-row" id="stage-controls">
+    <!-- Stage 01: Tokenize Legend -->
+    <div id="ctrl-s0" class="hide" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+      <span class="legend-chip"><span style="background:var(--amber)"></span> animal</span>
+      <span class="legend-chip"><span style="background:var(--teal)"></span> place</span>
+      <span class="legend-chip"><span style="background:var(--rose)"></span> verb</span>
+      <span class="legend-chip"><span style="background:var(--stone)"></span> function</span>
+      <span class="legend-chip"><span style="background:var(--punct)"></span> punct</span>
+      <span class="legend-chip"><span style="background:var(--periwinkle)"></span> other</span>
+      <span class="sub-caption">Words &gt; 6 letters split into chunks. Leading space is ·</span>
+    </div>
+
+    <!-- Stage 02: Embed Controls -->
+    <div id="ctrl-s1" class="hide" style="display:flex;gap:12px;align-items:center;">
+      <span class="sub-caption">Drag canvas to orbit cloud. Click any glowing dot to inspect its 16-number vector. Amber lines connect words with cosine similarity &gt; 0.5.</span>
+    </div>
+
+    <!-- Stage 03: Position Controls -->
+    <div id="ctrl-s2" class="hide" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+      <button class="pill on" id="pos-toggle" aria-label="Toggle positional encoding">Position encoding: ON</button>
+      <span class="sub-caption" id="pos-caption">Word order injected via sinusoidal wave frequencies (+). Toggle off to see word order vanish.</span>
+    </div>
+
+    <!-- Stage 04: Attend Controls -->
+    <div id="ctrl-s3" class="hide" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--dim)">Attention head:</span>
+      <span id="heads"></span>
+      <span class="sub-caption" id="head-caption"></span>
+    </div>
+
+    <!-- Stage 05: Layers Controls -->
+    <div id="ctrl-s4" class="hide" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+      <button class="pill go" id="replay-layer-btn" aria-label="Replay layer climb">↺ Replay climb</button>
+      <div class="slider-group">
+        <span>Speed</span>
+        <input type="range" id="layer-speed" min="0.4" max="2.4" step="0.1" value="1.0" aria-label="Layer climb animation speed">
+        <b id="layer-speed-val">1.0x</b>
+      </div>
+      <span class="sub-caption">Selected token passes through 8 depth slabs. Residual lines bypass each slab and rejoin.</span>
+    </div>
+
+    <!-- Stage 06: Predict Controls -->
+    <div id="ctrl-s5" class="hide" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+      <div class="slider-group">
+        <span>Temperature</span>
+        <input type="range" id="temp" min="0.2" max="2.0" step="0.05" value="0.8" aria-label="Softmax temperature">
+        <b id="tv">0.80</b>
+      </div>
+      <div class="slider-group">
+        <span>Top-k</span>
+        <input type="range" id="topk" min="1" max="10" step="1" value="10" aria-label="Top-k filtering limit">
+        <b id="topk-val">10</b>
+      </div>
+      <span class="sub-caption">Low temp sharpens probability; high temp spreads it out. Top-k dims and excludes unlikely words.</span>
+    </div>
+
+    <!-- Stage 07: Generate Controls -->
+    <div id="ctrl-s6" class="hide" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <button class="pill go" id="sample-btn" aria-label="Sample next token">Sample next token</button>
+      <button class="pill" id="auto-btn" aria-label="Toggle autoregressive generation">▶ Auto-generate</button>
+      <button class="pill" id="reset-btn" aria-label="Reset sentence">↺ Reset sentence</button>
+      <div class="slider-group" style="margin-left:auto">
+        <span>Temp</span>
+        <input type="range" id="temp-gen" min="0.2" max="2.0" step="0.05" value="0.8" style="width:90px" aria-label="Generation temperature">
+        <b id="tv-gen">0.80</b>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Simplified model. Vectors are hand-seeded, not real weights.</footer>
+
+<script>
+// WHAT THIS DOES: Global constants, theme color palette, canvas setup, and shared state.
+const $ = id => document.getElementById(id);
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const D = 16; // 16 numbers per vector visualized for clarity (real models use thousands)
+
+// Palette matching the observatory theme
+const COL = {
+  animal: '#f2b35a',     // warm amber
+  place: '#6fb7a8',      // muted teal
+  verb: '#d9776b',       // dusty rose
+  func: '#cfc8b6',       // stone / function words
+  punct: '#8a8678',      // dim gray for punctuation
+  other: '#8e9ad8'       // periwinkle
+};
+
+const cv = $('c');
+const ctx = cv.getContext('2d');
+let W, H, FOV;
+
+// Accessibility & motion preference
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+
+// WHAT THIS DOES: Repeatable random numbers and string hashing so the same word always gets the same values.
+function hash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function rnd(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+
+// WHAT THIS DOES: Category vocabulary and anchor coordinates to cluster similar words in 3D space.
+const WORDS = {
+  animal: 'cat dog fox bird mouse horse cow fish lion bear wolf sheep',
+  place: 'mat house park garden floor kitchen bed sofa room table chair',
+  verb: 'sat ran slept jumped ate purred sleeps runs walked saw is was',
+  func: 'the a an on it because and in of to at for with but that this',
+  punct: '. , ! ? ; :'
+};
+
+const ANCH = {
+  animal: [-4.0, 2.2, 1.5],
+  place: [4.0, -1.5, 2.0],
+  verb: [0.5, 3.0, -3.0],
+  func: [-1.0, -2.0, -2.5],
+  punct: [5.0, 2.5, -3.0],
+  other: [-5.0, -0.5, -1.5]
+};
+
+const GVEC = {};
+for (const g in ANCH) {
+  const r = rnd(hash(g));
+  GVEC[g] = Array.from({length: D}, () => (r() * 2 - 1) * 1.1);
+}
+
+function groupOf(k) {
+  for (const g in WORDS) {
+    if (WORDS[g].split(' ').includes(k)) return g;
+  }
+  return 'other';
+}
+
+
+// WHAT THIS DOES: Tokenizer that breaks text into words, chunks long words, and assigns unique IDs.
+function tokenize(s) {
+  if (!s || typeof s !== 'string') return [];
+  const parts = s.match(/ ?[A-Za-z']+| ?\d+| ?[^\sA-Za-z\d]/g) || [];
+  const out = [];
+  for (const p of parts) {
+    const lead = p[0] === ' ' ? ' ' : '';
+    const core = lead ? p.slice(1) : p;
+    // Words longer than 6 letters split into chunks of 5
+    if (/^[A-Za-z']+$/.test(core) && core.length > 6) {
+      const chunks = core.match(/.{1,5}/g) || [core];
+      chunks.forEach((c, i) => out.push((i ? '' : lead) + c));
+    } else {
+      out.push(p);
+    }
+  }
+  return out.slice(0, 40); // Cap at 40 tokens for silky smooth performance
+}
+
+
+// WHAT THIS DOES: Vector generator that creates 16-dimensional embedding numbers and 3D coordinates.
+function makeToken(t, posIndex, spawnPos) {
+  const key = t.trim().toLowerCase();
+  const grp = groupOf(key);
+  const r = rnd(hash(key));
+  const noise = [r() * 2 - 1, r() * 2 - 1, r() * 2 - 1];
+  const baseVec = GVEC[grp].map(g => g + (r() * 2 - 1) * 0.7);
+  const a = ANCH[grp];
+
+  // Positional sinusoidal encoding (different frequencies across vector dimensions)
+  const posVec = Array.from({length: D}, (_, d) => {
+    const freq = 1 / Math.pow(50, d / D);
+    return d % 2 === 0 ? Math.sin(posIndex * freq) : Math.cos(posIndex * freq);
+  });
+
+  const p = spawnPos ? spawnPos.slice() : [0, -9, 0];
+  return {
+    t,
+    key,
+    grp,
+    id: hash(key) % 50000,
+    vec: baseVec,
+    posVec,
+    w: Math.max(1.1, t.length * 0.3 + 0.9),
+    k: 0,
+    p,
+    tg: [0, 0, 0],
+    emb: [a[0] + noise[0] * 1.3, a[1] + noise[1] * 1.3, a[2] + noise[2] * 1.3]
+  };
+}
+
+
+// WHAT THIS DOES: Positional wave generator that creates sinusoidal frequency signatures for each token position.
+let posEnabled = true;
+
+function getCombinedVec(tok) {
+  if (!posEnabled) return tok.vec;
+  return tok.vec.map((v, d) => v + tok.posVec[d] * 0.75);
+}
+
+
+// WHAT THIS DOES: Application memory state: tokens, camera, current stage, attention heads, and prediction candidates.
+let toks = [];
+let stage = 0;
+let sel = 0;
+let head = 0;
+let temp = 0.8;
+let topK = 10;
+let SIM = [];
+let ATT = [];
+let PRED = [];
+
+let yaw = 0.15, pitch = 0.12, tYaw = 0.15, tPitch = 0.12;
+let dist = 20, zoom = 1, rowW = 10, time = 0;
+let fade = [1, 0, 0, 0, 0, 0, 0];
+let hits = [];
+let hm = null;
+let barH = [];
+
+// Layer visualization state (Stage 05)
+let layerT = 0;
+let layerSpeed = 1.0;
+
+// Tour state
+let tourActive = false;
+let tourTime = 0;
+
+// Auto-generation state (Stage 07)
+let autoGen = false;
+let lastGenTime = 0;
+
+// Tooltip state
+let hoverTarget = null;
+const tooltipEl = $('tooltip');
+
+// Attention heads configuration
+const HEADS = ['Nearby', 'Meaning', 'Anchor', 'Mixed'];
+const HEAD_CAPTIONS = [
+  'Learns local syntax by focusing on the immediate 1–2 prior words.',
+  'Learns semantic links by attending to tokens with related meanings.',
+  'Learns sentence-level anchors by maintaining a strong bond to token 0.',
+  'Learns flexible grammatical structure by balancing connectives with nouns.'
+];
+const MASK = [0, 1, 2, 3].map(h => {
+  const r = rnd(h * 77 + 5);
+  return Array.from({length: D}, () => h === 1 ? 1 : (r() > 0.4 ? 1 : -0.6));
+});
+
+
+// WHAT THIS DOES: Multi-head attention math that calculates how much tokens attend to earlier tokens.
+function attention() {
+  const n = toks.length;
+  const A = [];
+  for (let i = 0; i < n; i++) {
+    const s = [];
+    const vi = getCombinedVec(toks[i]);
+    for (let j = 0; j <= i; j++) { // Causal masking: tokens can only look backwards
+      const vj = getCombinedVec(toks[j]);
+      let dp = 0;
+      for (let d = 0; d < D; d++) dp += vi[d] * vj[d] * MASK[head][d];
+      dp /= 4; // Scaled dot product factor
+
+      if (head === 0) {
+        s.push(0.3 * dp - 1.1 * (i - j)); // Strong local bias
+      } else if (head === 1) {
+        s.push(1.5 * dp);                // Semantic similarity
+      } else if (head === 2) {
+        s.push(0.2 * dp + (j === 0 ? 2.8 : 0)); // Anchor to token 0
+      } else {
+        s.push(0.7 * dp - 0.3 * (i - j) + (toks[j].grp === 'func' ? 0.9 : 0)); // Mixed
+      }
+    }
+    const m = Math.max(...s);
+    const e = s.map(v => Math.exp(v - m));
+    const z = e.reduce((a, b) => a + b, 0) || 1;
+    A.push(e.map(v => v / z));
+  }
+  ATT = A;
+}
+
+
+// WHAT THIS DOES: Prediction and language model head that scores candidate next words with temperature and top-k.
+const CANDS = [
+  ['was', 'func'],
+  ['sat', 'verb'],
+  ['purred', 'verb'],
+  ['ran', 'verb'],
+  ['slept', 'verb'],
+  ['mat', 'place'],
+  ['floor', 'place'],
+  ['garden', 'place'],
+  ['cat', 'animal'],
+  ['happy', 'other'],
+  ['.', 'punct']
+];
+
+const CV = CANDS.map(c => makeToken(c[0], 0).vec);
+
+const BIAS = {
+  func: {place: 1.6, animal: 1.5, other: 1.0, verb: 0.8},
+  place: {verb: 1.3, func: 1.2, punct: 1.8},
+  animal: {verb: 2.4, func: 0.6, place: 0.4},
+  verb: {func: 2.0, place: 1.2, punct: 1.1},
+  other: {punct: 1.2, func: 1.0, place: 0.8},
+  punct: {func: 1.6, animal: 1.2, place: 0.8}
+};
+
+function softmax(scores, T) {
+  const scaled = scores.map(s => s / T);
+  const m = Math.max(...scaled);
+  const exp = scaled.map(v => Math.exp(v - m));
+  const sum = exp.reduce((x, y) => x + y, 0) || 1;
+  return exp.map(v => v / sum);
+}
+
+function predict() {
+  if (!toks.length) {
+    PRED = [];
+    return;
+  }
+  const last = toks.length - 1;
+  const lastTok = toks[last];
+  const lastAtt = ATT[last] || [1];
+
+  // Context vector weighted by attention weights
+  const ctxv = new Array(D).fill(0);
+  lastAtt.forEach((w, j) => {
+    const v = getCombinedVec(toks[j]);
+    v.forEach((val, d) => ctxv[d] += w * val);
+  });
+
+  // Score candidate words
+  const rawScores = CANDS.map((c, i) => {
+    let dp = 0;
+    for (let d = 0; d < D; d++) dp += ctxv[d] * CV[i][d];
+    let score = (BIAS[lastTok.grp][c[1]] || 0) + 0.35 * dp;
+
+    // Hand-crafted grammatical nudges for intuitive continuity
+    if (lastTok.key === 'it' && c[0] === 'was') score += 2.2;
+    if (lastTok.key === 'it' && c[0] === 'purred') score += 1.4;
+    if (lastTok.key === 'because' && c[0] === 'it') score += 2.0;
+    if (lastTok.key === 'on' && c[0] === 'the') score += 2.0;
+    if (lastTok.key === 'the' && (c[0] === 'mat' || c[0] === 'cat' || c[0] === 'floor')) score += 1.8;
+    if (lastTok.key === 'sat' && c[0] === 'on') score += 2.2;
+    if (lastTok.grp === 'place' && c[0] === '.') score += 1.6;
+    return score;
+  });
+
+  const rawProbs = softmax(rawScores, temp);
+  const fullList = CANDS.map((c, i) => ({
+    w: c[0],
+    g: c[1],
+    p: rawProbs[i],
+    rawScore: rawScores[i]
+  })).sort((a, b) => b.p - a.p);
+
+  // Apply Top-K filtering and renormalize top candidates
+  const kLimit = clamp(topK, 1, fullList.length);
+  const topSlice = fullList.slice(0, kLimit);
+  const sumTop = topSlice.reduce((acc, it) => acc + it.p, 0) || 1;
+
+  PRED = fullList.map((c, idx) => {
+    const inTopK = idx < kLimit;
+    return {
+      w: c.w,
+      g: c.g,
+      p: inTopK ? c.p / sumTop : 0,
+      inTopK,
+      rawProb: c.p
+    };
+  });
+}
+
+
+// WHAT THIS DOES: Rebuilds the model pipeline when text changes while smoothly preserving token positions.
+function rebuild(spawnFrom) {
+  const old = toks;
+  const raw = $('txt').value;
+  const pieces = tokenize(raw);
+
+  // Update token counter & warning limit
+  const countBadge = $('tok-count');
+  countBadge.textContent = pieces.length + '/40 tokens';
+  countBadge.classList.toggle('warn', pieces.length >= 40);
+
+  toks = pieces.map((t, i) => {
+    let spawn = null;
+    if (spawnFrom && i === pieces.length - 1) spawn = spawnFrom;
+    const k = makeToken(t, i, spawn);
+    if (old[i] && !spawn) {
+      k.p = old[i].p;
+      k.k = old[i].k;
+    }
+    return k;
+  });
+
+  sel = clamp(sel, 0, Math.max(0, toks.length - 1));
+
+  // Compute pairwise cosine similarity matrix
+  SIM = toks.map(a => toks.map(b => {
+    let d = 0, x = 0, y = 0;
+    const va = getCombinedVec(a), vb = getCombinedVec(b);
+    for (let i = 0; i < D; i++) {
+      d += va[i] * vb[i];
+      x += va[i] * va[i];
+      y += vb[i] * vb[i];
+    }
+    const denom = Math.sqrt(x * y);
+    return denom > 0.0001 ? d / denom : 0;
+  }));
+
+  attention();
+  predict();
+}
+
+
+// WHAT THIS DOES: 3D perspective camera projection that transforms 3D world points onto the 2D canvas.
+function proj(x, y, z) {
+  const yw = yaw + (reducedMotion ? 0 : Math.sin(time * 0.22) * 0.035);
+  const cy = Math.cos(yw), sy = Math.sin(yw);
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+
+  // Rotate world around Y-axis (yaw)
+  const X = x * cy - z * sy;
+  let Z = x * sy + z * cy;
+
+  // Rotate world around X-axis (pitch)
+  const Y = y * cp - Z * sp;
+  Z = y * sp + Z * cp;
+
+  const d = Math.max(dist + Z, 0.5);
+  const s = FOV / d;
+  return {
+    x: W / 2 + X * s,
+    y: H * 0.42 - Y * s,
+    s,
+    d,
+    rawZ: Z
+  };
+}
+
+
+// WHAT THIS DOES: Drawing helpers for crisp monospace text, radial glows, and soft background stars.
+function drawTxt(str, x, y, size, color, align, alpha) {
+  ctx.globalAlpha = alpha === undefined ? 1 : clamp(alpha, 0, 1);
+  ctx.fillStyle = color;
+  ctx.textAlign = align || 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = size + 'px ui-monospace, Menlo, monospace';
+  ctx.fillText(str, x, y);
+  ctx.globalAlpha = 1;
+}
+
+function drawGlow(x, y, r, color, a) {
+  if (r <= 0.5 || a <= 0.01) return;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, color);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = clamp(a, 0, 1);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, 6.283);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+const DUST = Array.from({length: 120}, (_, i) => {
+  const r = rnd(i * 13 + 7);
+  return [(r() - 0.5) * 44, (r() - 0.5) * 26, (r() - 0.5) * 44, r()];
+});
+
+
+// WHAT THIS DOES: Animation physics step that eases token positions, camera, layers, and transition fades.
+function step() {
+  yaw = lerp(yaw, tYaw, 0.12);
+  pitch = lerp(pitch, tPitch, 0.12);
+
+  // Calculate row spacing
+  let tot = 0;
+  toks.forEach(t => tot += t.w + 0.35);
+  let x = -tot / 2;
+  rowW = tot;
+
+  toks.forEach((t, i) => {
+    if (stage === 1) {
+      // 3D embedding cloud coordinates
+      t.tg = t.emb;
+    } else if (stage === 4) {
+      // Layers tower: tokens positioned on the active layer slab
+      const slabY = -2.6 + clamp(layerT, 0, 7) * 0.72;
+      t.tg = [x + t.w / 2, slabY + 0.2, 0];
+    } else if (stage === 5 || stage === 6) {
+      // Predict & Generate: token row lifts back
+      t.tg = [x + t.w / 2, 3.2, -3.2];
+    } else if (stage === 2 || stage === 3) {
+      // Position & Attend: comfortable eye level
+      t.tg = [x + t.w / 2, -0.6, 0];
+    } else {
+      // Tokenize row
+      t.tg = [x + t.w / 2, 0, 0];
+    }
+
+    x += t.w + 0.35;
+
+    // Smoothly ease positions towards target
+    for (let c = 0; c < 3; c++) {
+      t.p[c] = lerp(t.p[c], t.tg[c], 0.1);
+    }
+    // k = 1 for card layout; k = 0 for dot in embedding space
+    t.k = lerp(t.k, stage === 1 ? 0 : 1, 0.12);
+  });
+
+  // Auto-fit camera distance
+  const need = stage === 1 ? 14 : Math.max(rowW, stage >= 5 ? 15 : 9) * 1.15;
+  dist = lerp(dist, Math.max(9, (need * FOV) / (0.88 * W)) * zoom, 0.08);
+
+  // Easing stage fade transitions
+  for (let s = 0; s < 7; s++) {
+    fade[s] = lerp(fade[s], stage === s ? 1 : 0, 0.12);
+  }
+
+  // Smooth bar height easing for candidates
+  PRED.forEach((p, i) => {
+    const targetH = p.inTopK ? p.p * 7.5 : 0.01;
+    barH[i] = lerp(barH[i] || 0, targetH, 0.12);
+  });
+
+  // Stage 05 layer climb progression
+  if (stage === 4) {
+    layerT = (layerT + 0.025 * layerSpeed) % 8;
+  }
+
+  // Tour auto-progression
+  if (tourActive && !reducedMotion) {
+    tourTime += 0.016;
+    if (tourTime > 6.0) {
+      tourTime = 0;
+      setStage((stage + 1) % 7);
+    }
+  }
+
+  // Stage 07 autoregressive generation timer
+  if (stage === 6 && autoGen) {
+    const now = performance.now();
+    if (now - lastGenTime > 1250) {
+      lastGenTime = now;
+      sampleNextToken();
+    }
+  }
+}
+
+
+// WHAT THIS DOES: Draws the full 3D scene from far to near, including floor grid, tokens, arcs, and slabs.
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  hits = [];
+  hm = null;
+
+  // Background radial observatory atmosphere
+  const bg = ctx.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, Math.max(W, H) * 0.75);
+  bg.addColorStop(0, '#1a1d2e');
+  bg.addColorStop(1, '#090a10');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Soft ambient amber ground warmth
+  drawGlow(W / 2, H * 0.78, W * 0.45, '#f2b35a', 0.045);
+
+  // Slow drifting dust particles for spatial depth
+  DUST.forEach(d => {
+    const wobble = reducedMotion ? 0 : Math.sin(time * 0.12 + d[3] * 9) * 0.55;
+    const p = proj(d[0] + wobble, d[1], d[2]);
+    const alpha = clamp(1 - p.d / 70, 0, 0.45) * (0.35 + d[3] * 0.6);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#efe7d6';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 0.6 + d[3] * 1.0, 0, 6.283);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // Floor perspective grid fading with distance
+  ctx.lineWidth = 1;
+  for (let i = -14; i <= 14; i += 2) {
+    for (const ax of [0, 1]) {
+      const a = ax ? proj(-14, -3.6, i) : proj(i, -3.6, -14);
+      const b = ax ? proj(14, -3.6, i) : proj(i, -3.6, 14);
+      const avgD = (a.d + b.d) / 2;
+      const alpha = clamp(1 - avgD / 48, 0, 1) * 0.07;
+      ctx.strokeStyle = `rgba(239, 231, 214, ${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
+
+  // Gentle placeholder if input is completely empty
+  if (!toks.length) {
+    drawTxt('Type a sentence below to begin exploring...', W / 2, H * 0.42, 16, '#9a9686');
+    return;
+  }
+
+  // 3D Objects depth sorting (Painter's algorithm: far to near)
+  const items = [];
+
+  // Stage 05: Layer slabs
+  if (fade[4] > 0.02) {
+    for (let l = 0; l < 8; l++) {
+      items.push({
+        d: 22 - l * 0.4,
+        f: () => drawLayerSlab(l)
+      });
+    }
+    items.push({
+      d: 21,
+      f: drawLayerPulse
+    });
+  }
+
+  // Tokens
+  toks.forEach((tk, i) => {
+    const p = proj(...tk.p);
+    items.push({
+      d: p.d,
+      f: () => drawToken(tk, i, p)
+    });
+  });
+
+  // Stage 02: Embedding axes & similarity links
+  if (fade[1] > 0.02) {
+    items.push({ d: 999, f: drawEmbedExtras });
+  }
+
+  // Stage 03: Positional wave signatures
+  if (fade[2] > 0.02) {
+    items.push({ d: 990, f: drawPositionalWaves });
+  }
+
+  // Stage 04: Attention glowing arcs
+  if (fade[3] > 0.02) {
+    items.push({ d: 995, f: drawAttentionArcs });
+  }
+
+  // Stage 06 & 07: Prediction candidate columns
+  if (fade[5] > 0.02 || fade[6] > 0.02) {
+    const pFade = Math.max(fade[5], fade[6]);
+    PRED.forEach((pr, i) => {
+      const x = (i - (PRED.length - 1) / 2) * 1.35;
+      const p = proj(x, -1.5, 2.5);
+      items.push({
+        d: p.d,
+        f: () => drawCandidateBar(pr, i, x, pFade)
+      });
+    });
+  }
+
+  // Render sorted items from farthest to nearest
+  items.sort((a, b) => b.d - a.d).forEach(it => it.f());
+
+  // Top 2D overlays (barcodes, heatmaps, layer specs)
+  drawOverlays();
+}
+
+
+// WHAT THIS DOES: Draws individual token cards in rows or glowing dots in the embedding cloud.
+function drawToken(tk, i, p) {
+  const u = p.s;
+  const k = tk.k;
+  const c = COL[tk.grp] || '#efe7d6';
+  const isSel = i === sel;
+
+  // Dot representation in Embedding cloud (k near 0)
+  if (k < 0.97) {
+    const dotAlpha = (1 - k) * 0.85;
+    drawGlow(p.x, p.y, u * 0.55, c, dotAlpha);
+    ctx.globalAlpha = 1 - k;
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, u * 0.14, 0, 6.283);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    drawTxt(tk.t.trim(), p.x, p.y + u * 0.48, u * 0.33, '#efe7d6', 'center', (1 - k) * 0.9);
+  }
+
+  // Card representation in Row layouts (k near 1)
+  if (k > 0.03) {
+    const s = 0.3 + 0.7 * k;
+    const w = tk.w * u * s;
+    const h = 0.82 * u * s;
+
+    ctx.globalAlpha = k;
+    ctx.fillStyle = 'rgba(21, 24, 37, 0.92)';
+    ctx.strokeStyle = isSel && (stage === 3 || stage === 2) ? '#efe7d6' : c;
+    ctx.lineWidth = isSel ? 2.0 : 1.0;
+
+    // Rounded rectangle card
+    ctx.beginPath();
+    ctx.roundRect(p.x - w / 2, p.y - h / 2, w, h, h * 0.22);
+    ctx.fill();
+    ctx.stroke();
+
+    // Category underline accent
+    ctx.fillStyle = c;
+    ctx.fillRect(p.x - w / 2 + h * 0.18, p.y + h * 0.3, w - h * 0.36, Math.max(1.2, u * 0.038));
+    ctx.globalAlpha = 1;
+
+    // Token text (leading space represented with elegant dot ·)
+    const displayStr = tk.t.replace(/^ /, '·');
+    drawTxt(displayStr, p.x, p.y - h * 0.06, u * 0.42 * s, '#efe7d6', 'center', k);
+
+    // Stage 01: Token ID displayed underneath
+    if (fade[0] > 0.05) {
+      drawTxt('#' + tk.id, p.x, p.y + h * 0.95, u * 0.27, '#9a9686', 'center', k * fade[0]);
+    }
+
+    // Stage 04: Attention weight percentage bar underneath
+    if (fade[3] > 0.05 && ATT[sel] && i <= sel) {
+      const wt = ATT[sel][i] || 0;
+      ctx.fillStyle = '#f2b35a';
+      ctx.globalAlpha = k * fade[3];
+      ctx.fillRect(p.x - w / 2, p.y + h * 0.62, w * wt, Math.max(2, u * 0.075));
+      ctx.globalAlpha = 1;
+      if (wt > 0.04) {
+        drawTxt(Math.round(wt * 100) + '%', p.x, p.y + h * 1.15, u * 0.3, '#f2b35a', 'center', k * fade[3]);
+      }
+    }
+  }
+
+  // Selection ring in embedding space
+  if (stage === 1 && isSel) {
+    ctx.strokeStyle = '#efe7d6';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, u * 0.34, 0, 6.283);
+    ctx.stroke();
+  }
+
+  // Hit target registration for pointer picking
+  hits.push({
+    type: 'token',
+    i,
+    tok: tk,
+    x: p.x,
+    y: p.y,
+    rx: Math.max((tk.w * u / 2) * tk.k, u * 0.35),
+    ry: Math.max(0.42 * u * tk.k, u * 0.35)
+  });
+}
+
+
+// WHAT THIS DOES: Draws positional wave signatures and addition indicators above tokens in stage 3.
+function drawPositionalWaves() {
+  const a = fade[2];
+  if (a < 0.02) return;
+
+  toks.forEach((tk, idx) => {
+    const baseP = proj(tk.p[0], tk.p[1] + 1.25, tk.p[2]);
+    const u = baseP.s;
+    const waveW = tk.w * u * 0.9;
+    const pts = 20;
+
+    // Draw multi-frequency sine wave signature
+    ctx.strokeStyle = posEnabled ? '#6fb7a8' : 'rgba(111, 183, 168, 0.2)';
+    ctx.lineWidth = 1.4;
+    ctx.globalAlpha = a * (posEnabled ? 0.9 : 0.25);
+    ctx.beginPath();
+
+    for (let step = 0; step <= pts; step++) {
+      const frac = (step / pts) - 0.5;
+      const wx = baseP.x + frac * waveW;
+      const freq1 = 2.5 + (idx % 4) * 1.2;
+      const freq2 = 5.0 + (idx % 3) * 1.8;
+      const wy = baseP.y + Math.sin(frac * freq1 * Math.PI + idx * 0.8) * (u * 0.18)
+                         + Math.cos(frac * freq2 * Math.PI) * (u * 0.08);
+      if (step === 0) ctx.moveTo(wx, wy);
+      else ctx.lineTo(wx, wy);
+    }
+    ctx.stroke();
+
+    // Subtle "+" operation indicator between wave and card
+    drawTxt('+', baseP.x, baseP.y + u * 0.42, u * 0.28, posEnabled ? '#f2b35a' : '#6b685c', 'center', a * 0.8);
+    drawTxt('pos ' + idx, baseP.x, baseP.y - u * 0.32, u * 0.22, '#9a9686', 'center', a * 0.7);
+  });
+  ctx.globalAlpha = 1;
+}
+
+
+// WHAT THIS DOES: Draws 3D coordinate axes and similarity lines between related words in stage 2.
+function drawEmbedExtras() {
+  const a = fade[1];
+  const o = proj(0, 0, 0);
+  const x = proj(6, 0, 0), y = proj(0, 6, 0), z = proj(0, 0, 6);
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(239, 231, 214, 0.18)';
+  ctx.globalAlpha = a;
+
+  // Labeled 3D coordinate axes
+  [x, y, z].forEach((q, n) => {
+    ctx.beginPath();
+    ctx.moveTo(o.x, o.y);
+    ctx.lineTo(q.x, q.y);
+    ctx.stroke();
+    drawTxt('dim ' + (n + 1), q.x, q.y - 10, 11, '#9a9686', 'center', a * 0.8);
+  });
+
+  // Thin amber lines between words with cosine similarity > 0.5
+  for (let i = 0; i < toks.length; i++) {
+    for (let j = i + 1; j < toks.length; j++) {
+      if (SIM[i] && SIM[i][j] > 0.5) {
+        const p = proj(...toks[i].p);
+        const q = proj(...toks[j].p);
+        ctx.strokeStyle = '#f2b35a';
+        ctx.globalAlpha = a * (SIM[i][j] - 0.45) * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(q.x, q.y);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+
+// WHAT THIS DOES: Draws glowing parabolic attention arcs between tokens in stage 4.
+function drawAttentionArcs() {
+  const q = toks[sel];
+  if (!q || !ATT[sel]) return;
+
+  ATT[sel].forEach((w, j) => {
+    if (j === sel) return;
+    const t = toks[j];
+    const span = Math.abs(sel - j);
+    const pts = [];
+
+    for (let n = 0; n <= 24; n++) {
+      const f = n / 24;
+      pts.push(proj(
+        lerp(q.p[0], t.p[0], f),
+        lerp(q.p[1], t.p[1], f) + Math.sin(f * Math.PI) * (1.2 + span * 0.55),
+        lerp(q.p[2], t.p[2], f)
+      ));
+    }
+
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#f2b35a';
+    ctx.globalAlpha = fade[3] * (0.12 + w * 0.88);
+    ctx.lineWidth = 0.8 + w * 12;
+    ctx.beginPath();
+    pts.forEach((p, n) => n ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+}
+
+
+// WHAT THIS DOES: Draws the 8-layer transformer slab tower and climbing token pulse in stage 5.
+function drawLayerSlab(l) {
+  const y = -2.6 + l * 0.72;
+  const isCurrent = Math.floor(layerT) === l;
+  const slabW = Math.max(rowW * 0.7, 10.5);
+  const slabD = 6.0;
+
+  // Quad corners in 3D
+  const c0 = proj(-slabW / 2, y, -slabD / 2);
+  const c1 = proj(slabW / 2, y, -slabD / 2);
+  const c2 = proj(slabW / 2, y, slabD / 2);
+  const c3 = proj(-slabW / 2, y, slabD / 2);
+
+  ctx.globalAlpha = fade[4] * (isCurrent ? 0.85 : 0.35);
+  ctx.fillStyle = isCurrent ? 'rgba(38, 48, 74, 0.65)' : 'rgba(20, 24, 38, 0.45)';
+  ctx.strokeStyle = isCurrent ? '#f2b35a' : 'rgba(239, 231, 214, 0.16)';
+  ctx.lineWidth = isCurrent ? 1.8 : 0.9;
+
+  ctx.beginPath();
+  ctx.moveTo(c0.x, c0.y);
+  ctx.lineTo(c1.x, c1.y);
+  ctx.lineTo(c2.x, c2.y);
+  ctx.lineTo(c3.x, c3.y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Sublayer alternating labels on the left edge
+  const sublabel = l % 2 === 0 ? 'Self-Attention' : 'Feed-Forward';
+  drawTxt(`Layer ${l + 1} · ${sublabel}`, c0.x + 8, c0.y, 11, isCurrent ? '#f2b35a' : '#9a9686', 'left', fade[4] * 0.85);
+
+  // Residual connection bypass line on right side
+  if (l > 0) {
+    const prevY = -2.6 + (l - 1) * 0.72;
+    const startP = proj(slabW / 2 + 0.3, prevY, 0);
+    const endP = proj(slabW / 2 + 0.3, y, 0);
+    const midP = proj(slabW / 2 + 1.2, (prevY + y) / 2, 0);
+
+    ctx.strokeStyle = 'rgba(111, 183, 168, 0.45)';
+    ctx.lineWidth = 1.0;
+    ctx.globalAlpha = fade[4] * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(startP.x, startP.y);
+    ctx.quadraticCurveTo(midP.x, midP.y, endP.x, endP.y);
+    ctx.stroke();
+
+    if (l === 4) {
+      drawTxt('residual connection: x + Sublayer(x)', midP.x + 8, midP.y, 10, '#6fb7a8', 'left', fade[4] * 0.75);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawLayerPulse() {
+  const currentY = -2.6 + layerT * 0.72;
+  const pulseP = proj(0, currentY, 0);
+  const u = pulseP.s;
+
+  // Color slowly shifts from token color to predicted next word's color as it climbs
+  const startColor = COL[toks[sel] ? toks[sel].grp : 'func'];
+  const endColor = PRED.length ? COL[PRED[0].g] : '#f2b35a';
+  const climbRatio = clamp(layerT / 7.0, 0, 1);
+
+  drawGlow(pulseP.x, pulseP.y, u * 0.8, '#f2b35a', fade[4] * 0.5);
+  ctx.globalAlpha = fade[4];
+  ctx.fillStyle = climbRatio > 0.5 ? endColor : startColor;
+  ctx.beginPath();
+  ctx.arc(pulseP.x, pulseP.y, u * 0.18, 0, 6.283);
+  ctx.fill();
+
+  drawTxt(`Deep representation (climbing layer ${Math.floor(layerT) + 1}/8)`, pulseP.x, pulseP.y - u * 0.45, 11, '#efe7d6', 'center', fade[4] * 0.9);
+  ctx.globalAlpha = 1;
+}
+
+
+// WHAT THIS DOES: Draws 3D probability columns and connection threads for candidate words in stage 6.
+function drawCandidateBar(pr, i, x, pFade) {
+  const h = barH[i] || 0.01;
+  const a = proj(x, -1.5, 2.5);
+  const b = proj(x, -1.5 + h, 2.5);
+  const c = COL[pr.g] || '#efe7d6';
+  const u = a.s;
+
+  const last = toks[toks.length - 1];
+  if (last) {
+    const l = proj(...last.p);
+    // Thread from last token to top of candidate column
+    ctx.strokeStyle = c;
+    ctx.lineWidth = pr.inTopK ? 1.1 : 0.5;
+    ctx.globalAlpha = pFade * (pr.inTopK ? pr.p * 0.85 : 0.1);
+    ctx.beginPath();
+    ctx.moveTo(l.x, l.y);
+    ctx.quadraticCurveTo((l.x + b.x) / 2, Math.min(l.y, b.y) - u * 0.35, b.x, b.y);
+    ctx.stroke();
+  }
+
+  if (!pr.inTopK) {
+    // Dimmed out candidate outside Top-K
+    drawTxt(pr.w, a.x, a.y + u * 0.45, u * 0.3, '#6b685c', 'center', pFade * 0.3);
+    return;
+  }
+
+  drawGlow(a.x, a.y, u * 0.65, c, pFade * 0.25);
+
+  // Gradient column body
+  const g = ctx.createLinearGradient(0, a.y, 0, b.y);
+  g.addColorStop(0, c + '22');
+  g.addColorStop(1, c);
+
+  ctx.globalAlpha = pFade;
+  ctx.strokeStyle = g;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = u * 0.48;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Percentage & word label
+  drawTxt(Math.round(pr.p * 100) + '%', b.x, b.y - u * 0.45, u * 0.3, '#efe7d6', 'center', pFade);
+  drawTxt(pr.w, a.x, a.y + u * 0.48, u * 0.35, c, 'center', pFade);
+
+  // Register hover hit target
+  hits.push({
+    type: 'cand',
+    cand: pr,
+    x: a.x,
+    y: (a.y + b.y) / 2,
+    rx: u * 0.4,
+    ry: Math.max(u * 0.4, Math.abs(a.y - b.y) / 2)
+  });
+}
+
+
+// WHAT THIS DOES: Draws 2D overlays on the canvas: vector barcodes, attention heatmap, and layer readouts.
+function drawOverlays() {
+  const tk = toks[sel];
+  if (!tk) return;
+
+  // Stage 02: Embedding vector 16-number barcode
+  if (fade[1] > 0.05) {
+    const x0 = W - 28 - 16 * 11, y0 = 96;
+    drawTxt('EMBEDDING OF "' + tk.t.trim() + '"', W - 28, y0 - 30, 11, '#9a9686', 'right', fade[1]);
+    drawTxt('16 of ~4,096 numbers shown', W - 28, y0 - 15, 10, '#6b685c', 'right', fade[1]);
+
+    tk.vec.forEach((v, d) => {
+      const h = clamp(v, -1.6, 1.6) * 19;
+      ctx.globalAlpha = fade[1];
+      ctx.fillStyle = v > 0 ? '#f2b35a' : '#6fb7a8';
+      ctx.fillRect(x0 + d * 11, y0 + 24 - Math.max(h, 0), 8, Math.abs(h));
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // Stage 03: Positional vector before/after comparison
+  if (fade[2] > 0.05) {
+    const x0 = W - 28 - 16 * 10, y0 = 90;
+    drawTxt(`POSITIONAL ENCODING · TOKEN #${sel} ("${tk.t.trim()}")`, W - 28, y0 - 24, 11, '#9a9686', 'right', fade[2]);
+
+    // Word base vector
+    drawTxt('Word Base Vector', W - 28, y0 - 8, 9.5, '#6b685c', 'right', fade[2]);
+    tk.vec.forEach((v, d) => {
+      const h = clamp(v, -1.4, 1.4) * 8;
+      ctx.fillStyle = v > 0 ? '#f2b35a' : '#6fb7a8';
+      ctx.fillRect(x0 + d * 10, y0 + 10 - Math.max(h, 0), 7, Math.abs(h));
+    });
+
+    // Positional Wave vector
+    drawTxt('+ Positional Wave (frequencies)', W - 28, y0 + 30, 9.5, posEnabled ? '#6fb7a8' : '#6b685c', 'right', fade[2]);
+    tk.posVec.forEach((v, d) => {
+      const h = clamp(v, -1.4, 1.4) * 8 * (posEnabled ? 1 : 0.15);
+      ctx.fillStyle = '#6fb7a8';
+      ctx.fillRect(x0 + d * 10, y0 + 48 - Math.max(h, 0), 7, Math.abs(h));
+    });
+
+    // Combined Vector
+    const comb = getCombinedVec(tk);
+    drawTxt('= Combined Representation', W - 28, y0 + 68, 9.5, '#f2b35a', 'right', fade[2]);
+    comb.forEach((v, d) => {
+      const h = clamp(v, -1.6, 1.6) * 8;
+      ctx.fillStyle = v > 0 ? '#f2b35a' : '#6fb7a8';
+      ctx.fillRect(x0 + d * 10, y0 + 86 - Math.max(h, 0), 7, Math.abs(h));
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // Stage 04: Causal lower-triangular attention heatmap
+  if (fade[3] > 0.05 && ATT.length) {
+    const n = toks.length;
+    const c = Math.min(22, 190 / n);
+    const x0 = W - 28 - n * c;
+    const y0 = 90;
+    hm = {x0, y0, c, n};
+
+    drawTxt('ATTENTION · HEAD ' + (head + 1) + ' · ' + HEADS[head].toUpperCase(), W - 28, y0 - 15, 11, '#9a9686', 'right', fade[3]);
+
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        ctx.globalAlpha = fade[3];
+        if (j <= i) {
+          const wt = ATT[i][j] || 0;
+          ctx.fillStyle = `rgba(242, 179, 90, ${Math.pow(wt, 0.6) * 0.95 + 0.04})`;
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'; // Causal mask (cannot see future)
+        }
+        ctx.fillRect(x0 + j * c, y0 + i * c, c - 1.5, c - 1.5);
+      }
+    }
+    // Highlight currently selected token row
+    ctx.strokeStyle = '#efe7d6';
+    ctx.globalAlpha = fade[3];
+    ctx.strokeRect(x0 - 1, y0 + sel * c - 1, n * c + 1, c);
+    ctx.globalAlpha = 1;
+  }
+}
+
+
+// WHAT THIS DOES: Stage descriptions and educational text shown in the bottom control panel.
+const STAGES = [
+  [
+    'Tokenize',
+    'A model cannot read letters. A <em>tokenizer</em> chops text into chunks called tokens—words, subwords, or punctuation—and assigns each a unique <em>ID number</em>. Words longer than six letters are split into smaller pieces.'
+  ],
+  [
+    'Embed',
+    'Each token ID looks up a coordinate in high-dimensional space: an <em>embedding vector</em>. Words with similar meanings land near each other in this space. Faint amber lines connect words with high <em>cosine similarity</em>.'
+  ],
+  [
+    'Position',
+    'Because attention processes all words at once, word order must be injected manually. A <em>positional encoding</em>—a wave signature of varying frequencies—is added to each token\'s vector. Toggle position on or off to inspect the before and after <em>wave barcodes</em>.'
+  ],
+  [
+    'Attend',
+    'Tokens pass information to each other using <em>self-attention</em>. Each token looks back at earlier tokens to weigh context, forming glowing arcs whose thickness reflects importance. Switch between <em>attention heads</em> to see different learned relationship patterns.'
+  ],
+  [
+    'Layers',
+    'A deep transformer stacks multiple identical <em>layers</em>—each containing attention and feed-forward sublayers. Information flows upward through the slabs while <em>residual connections</em> preserve the original signal. As representations climb, they sharpen toward the next prediction.'
+  ],
+  [
+    'Predict',
+    'The final token representation is compared against candidate words, and <em>softmax</em> converts the scores into probabilities. Adjust <em>temperature</em> to control how sharp or flat the distribution is, and tune <em>top-k</em> to truncate low-probability words.'
+  ],
+  [
+    'Generate',
+    'Text generation is an <em>autoregressive loop</em>: the model samples a word, appends it to the sentence, and runs the entire machine again. Press <em>Sample next token</em> to step forward, or toggle <em>Auto-generate</em> to let the model write on its own.'
+  ]
+];
+
+
+// WHAT THIS DOES: Stage switcher and dynamic control panel setup for all seven pipeline stages.
+const VIEWS = [
+  [0.15, 0.12],   // 01 Tokenize
+  [0.65, 0.28],   // 02 Embed
+  [0.18, 0.22],   // 03 Position
+  [0.12, 0.24],   // 04 Attend
+  [0.72, 0.32],   // 05 Layers
+  [0.45, 0.28],   // 06 Predict
+  [0.35, 0.24]    // 07 Generate
+];
+
+// Build Stage tabs in HTML
+STAGES.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.className = 'tab';
+  b.setAttribute('role', 'tab');
+  b.setAttribute('aria-label', `Stage ${i + 1}: ${s[0]}`);
+  b.innerHTML = `<b>0${i + 1}</b>${s[0]}`;
+  b.onclick = () => {
+    stopTour();
+    setStage(i);
+  };
+  $('tabs').appendChild(b);
+});
+
+// Build Attention Head buttons
+HEADS.forEach((h, i) => {
+  const b = document.createElement('button');
+  b.className = 'pill';
+  b.textContent = h;
+  b.onclick = () => {
+    head = i;
+    attention();
+    predict();
+    markHeads();
+  };
+  $('heads').appendChild(b);
+});
+
+function markHeads() {
+  [...$('heads').children].forEach((b, i) => b.classList.toggle('on', i === head));
+  $('head-caption').textContent = HEAD_CAPTIONS[head];
+}
+
+function setStage(i) {
+  stage = clamp(i, 0, 6);
+  [tYaw, tPitch] = VIEWS[stage];
+  zoom = 1;
+
+  // Update tab styles
+  [...$('tabs').children].forEach((b, n) => b.classList.toggle('on', n === stage));
+
+  // Update explanation
+  $('desc').innerHTML = STAGES[stage][1];
+
+  // Show only relevant controls for this stage
+  for (let s = 0; s < 7; s++) {
+    const el = $('ctrl-s' + s);
+    if (el) el.classList.toggle('hide', s !== stage);
+  }
+
+  markHeads();
+
+  // Smart selection defaults
+  if (stage === 3 || stage === 4 || stage >= 5) {
+    sel = Math.max(0, toks.length - 1);
+  }
+}
+
+
+// WHAT THIS DOES: Autoregressive token generation loop, animated flying cards, and sentence reset.
+function sampleNextToken() {
+  if (!PRED.length) return;
+
+  // Filter valid top-k candidates
+  const valid = PRED.filter(p => p.inTopK && p.p > 0.001);
+  if (!valid.length) return;
+
+  let r = Math.random();
+  let pick = valid[valid.length - 1];
+  for (const cand of valid) {
+    r -= cand.p;
+    if (r <= 0) {
+      pick = cand;
+      break;
+    }
+  }
+
+  // Find candidate column 3D coordinates for spawn glide
+  const candIndex = PRED.findIndex(p => p.w === pick.w);
+  const candX = (candIndex - (PRED.length - 1) / 2) * 1.35;
+  const spawnPos = [candX, -1.5, 2.5];
+
+  // Append word with proper punctuation spacing
+  const isPunct = /^[.,!?;:]$/.test(pick.w);
+  const currentVal = $('txt').value;
+  $('txt').value = currentVal + (isPunct || !currentVal ? '' : ' ') + pick.w;
+
+  rebuild(spawnPos);
+  sel = toks.length - 1;
+
+  // Auto-stop generation if period is reached or max tokens reached
+  if (pick.w === '.' || toks.length >= 40) {
+    stopAutoGen();
+  }
+}
+
+function stopAutoGen() {
+  autoGen = false;
+  $('auto-btn').textContent = '▶ Auto-generate';
+  $('auto-btn').classList.remove('on');
+}
+
+function toggleAutoGen() {
+  autoGen = !autoGen;
+  $('auto-btn').textContent = autoGen ? '⏸ Stop' : '▶ Auto-generate';
+  $('auto-btn').classList.toggle('on', autoGen);
+  if (autoGen) {
+    lastGenTime = performance.now();
+  }
+}
+
+function resetSentence() {
+  stopAutoGen();
+  $('txt').value = 'The cat sat on the mat because it';
+  rebuild();
+  setStage(stage);
+}
+
+
+// WHAT THIS DOES: Auto-advancing guided tour that steps through stages and pauses on user interaction.
+function startTour() {
+  tourActive = true;
+  tourTime = 0;
+  $('tour-btn').textContent = '⏸ Pause tour';
+  $('tour-btn').classList.add('on');
+}
+
+function stopTour() {
+  if (!tourActive) return;
+  tourActive = false;
+  $('tour-btn').textContent = '▶ Play tour';
+  $('tour-btn').classList.remove('on');
+}
+
+function toggleTour() {
+  if (tourActive) stopTour();
+  else startTour();
+}
+
+
+// WHAT THIS DOES: User input event listeners for mouse orbit, wheel zoom, touch gestures, and keyboard shortcuts.
+let drag = null;
+let moved = 0;
+
+cv.addEventListener('pointerdown', e => {
+  stopTour();
+  drag = { x: e.clientX, y: e.clientY };
+  moved = 0;
+  cv.setPointerCapture(e.pointerId);
+});
+
+cv.addEventListener('pointermove', e => {
+  // Handle 3D camera orbit rotation
+  if (drag) {
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    moved += Math.abs(dx) + Math.abs(dy);
+    tYaw += dx * 0.006;
+    tPitch = clamp(tPitch + dy * 0.005, -0.2, 1.15);
+    drag = { x: e.clientX, y: e.clientY };
+  }
+
+  // Handle pointer hover detection for tooltips
+  handlePointerHover(e.clientX, e.clientY);
+});
+
+cv.addEventListener('pointerup', e => {
+  if (moved < 5) {
+    pick(e.clientX, e.clientY);
+  }
+  drag = null;
+});
+
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  stopTour();
+  zoom = clamp(zoom * (1 + e.deltaY * 0.001), 0.5, 2.2);
+}, { passive: false });
+
+function pick(x, y) {
+  // Attention heatmap cell click
+  if (stage === 3 && hm) {
+    const col = Math.floor((x - hm.x0) / hm.c);
+    const row = Math.floor((y - hm.y0) / hm.c);
+    if (col >= 0 && row >= 0 && col < hm.n && row < hm.n && col <= row) {
+      sel = row;
+      return;
+    }
+  }
+
+  // 3D hit detection
+  let best = null;
+  hits.forEach(h => {
+    if (Math.abs(x - h.x) < h.rx && Math.abs(y - h.y) < h.ry) {
+      best = h;
+    }
+  });
+
+  if (best) {
+    if (best.type === 'token') {
+      sel = best.i;
+    }
+  }
+}
+
+function handlePointerHover(x, y) {
+  let hovered = null;
+
+  // Check heatmap cells in Stage 04
+  if (stage === 3 && hm) {
+    const col = Math.floor((x - hm.x0) / hm.c);
+    const row = Math.floor((y - hm.y0) / hm.c);
+    if (col >= 0 && row >= 0 && col < hm.n && row < hm.n && col <= row) {
+      const wt = ATT[row] && ATT[row][col] ? Math.round(ATT[row][col] * 100) : 0;
+      hovered = {
+        x, y,
+        text: `Attention: "${toks[row].t.trim()}" → "${toks[col].t.trim()}" : ${wt}%`
+      };
+    }
+  }
+
+  // Check 3D hits
+  if (!hovered) {
+    hits.forEach(h => {
+      if (Math.abs(x - h.x) < h.rx && Math.abs(y - h.y) < h.ry) {
+        if (h.type === 'token') {
+          hovered = {
+            x: h.x,
+            y: h.y - h.ry - 10,
+            text: `Token "${h.tok.t.trim()}" · ${h.tok.grp} · #${h.tok.id}`
+          };
+        } else if (h.type === 'cand') {
+          hovered = {
+            x: h.x,
+            y: h.y - h.ry - 10,
+            text: `Candidate "${h.cand.w}" (${h.cand.g}) · ${Math.round(h.cand.p * 100)}%`
+          };
+        }
+      }
+    });
+  }
+
+  if (hovered) {
+    cv.style.cursor = 'pointer';
+    tooltipEl.style.left = hovered.x + 'px';
+    tooltipEl.style.top = hovered.y + 'px';
+    tooltipEl.textContent = hovered.text;
+    tooltipEl.style.opacity = '1';
+  } else {
+    cv.style.cursor = drag ? 'grabbing' : 'grab';
+    tooltipEl.style.opacity = '0';
+  }
+}
+
+// Keyboard shortcuts (Keys 1-7 switch stages when not typing in the text field)
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+
+  if (e.key >= '1' && e.key <= '7') {
+    stopTour();
+    setStage(parseInt(e.key, 10) - 1);
+  } else if (e.key === 'ArrowRight') {
+    stopTour();
+    setStage((stage + 1) % 7);
+  } else if (e.key === 'ArrowLeft') {
+    stopTour();
+    setStage((stage + 6) % 7);
+  }
+});
+
+// UI Controls Event Listeners
+$('prev-btn').onclick = () => { stopTour(); setStage((stage + 6) % 7); };
+$('next-btn').onclick = () => { stopTour(); setStage((stage + 1) % 7); };
+$('tour-btn').onclick = toggleTour;
+
+$('txt').addEventListener('input', () => {
+  stopTour();
+  rebuild();
+  if (stage < 3) sel = Math.min(sel, Math.max(0, toks.length - 1));
+});
+
+$('pos-toggle').onclick = () => {
+  posEnabled = !posEnabled;
+  $('pos-toggle').textContent = posEnabled ? 'Position encoding: ON' : 'Position encoding: OFF';
+  $('pos-toggle').classList.toggle('on', posEnabled);
+  $('pos-caption').textContent = posEnabled
+    ? 'Word order injected via sinusoidal wave frequencies (+). Toggle off to see word order vanish.'
+    : 'Position vectors zeroed: representation now ignores word order!';
+  rebuild();
+};
+
+$('replay-layer-btn').onclick = () => { layerT = 0; };
+$('layer-speed').addEventListener('input', e => {
+  layerSpeed = +e.target.value;
+  $('layer-speed-val').textContent = layerSpeed.toFixed(1) + 'x';
+});
+
+$('temp').addEventListener('input', e => {
+  temp = +e.target.value;
+  const valStr = temp.toFixed(2);
+  $('tv').textContent = valStr;
+  $('tv-gen').textContent = valStr;
+  $('temp-gen').value = temp;
+  predict();
+});
+
+$('temp-gen').addEventListener('input', e => {
+  temp = +e.target.value;
+  const valStr = temp.toFixed(2);
+  $('tv').textContent = valStr;
+  $('tv-gen').textContent = valStr;
+  $('temp').value = temp;
+  predict();
+});
+
+$('topk').addEventListener('input', e => {
+  topK = +e.target.value;
+  $('topk-val').textContent = topK === 10 ? '10 (all)' : topK;
+  predict();
+});
+
+$('sample-btn').onclick = sampleNextToken;
+$('auto-btn').onclick = toggleAutoGen;
+$('reset-btn').onclick = resetSentence;
+
+
+// WHAT THIS DOES: Canvas retina resizing, tab visibility pause, and 60fps animation loop initialization.
+function resize() {
+  const r = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  cv.width = Math.round(W * r);
+  cv.height = Math.round(H * r);
+  ctx.setTransform(r, 0, 0, r, 0, 0);
+  FOV = Math.min(W, H * 1.6);
+}
+window.addEventListener('resize', resize);
+
+let isRunning = true;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    isRunning = false;
+  } else {
+    isRunning = true;
+    requestAnimationFrame(frame);
+  }
+});
+
+function frame(ms) {
+  if (!isRunning) return;
+  time = ms / 1000;
+  step();
+  render();
+  requestAnimationFrame(frame);
+}
+
+// Initial boot
+resize();
+rebuild();
+setStage(0);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
